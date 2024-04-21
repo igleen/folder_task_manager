@@ -1,1 +1,0 @@
-gcc opus3.cpp -lstdc++ -O2
