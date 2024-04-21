@@ -3,10 +3,10 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <ncurses.h>
 #include <unistd.h>
 #include <dirent.h>
 #include <algorithm>
-#include <sys/ioctl.h>
 
 struct ProcessInfo {
     std::string pid;
@@ -57,32 +57,35 @@ std::vector<ProcessInfo> getProcessList() {
 }
 
 int main() {
-    struct winsize w;
-    ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
-    int screenHeight = w.ws_row - 2; // Subtract 2 for the header and prompt lines
+    initscr();
+    cbreak();
+    noecho();
+    curs_set(0);
 
     while (true) {
-        std::system("clear");
+        clear();
         std::vector<ProcessInfo> processList = getProcessList();
 
         // Sort the processes by reserved memory usage in descending order
         std::sort(processList.begin(), processList.end(), [](const ProcessInfo& a, const ProcessInfo& b) {
             return a.rss > b.rss;
         });
-
-        std::cout << "PID\tMemory\tState\t\tName" << std::endl;
-        int count = 0;
+        mvprintw(0, 0, "PID\tMemory\tS Name");
+        int row = 2;
         for (const auto& process : processList) {
-            if (count >= screenHeight) {
+            if (row >= LINES - 1) {
                 break;
             }
             std::string truncatedName = process.name.substr(0, 16);
-            std::cout << process.pid << "\t" << process.rss << "\t"
-                      << process.state << "\t" << truncatedName << std::endl;
-            count++;
+            std::string state = process.state.substr(0, 1); // Get the first character of the state
+            mvprintw(row, 0, "%s\t%ld\t%s %s", process.pid.c_str(), process.rss, state.c_str(), truncatedName.c_str());
+            row++;
         }
-        sleep(1);
+
+        refresh();
+        napms(1000);
     }
 
+    endwin();
     return 0;
 }
