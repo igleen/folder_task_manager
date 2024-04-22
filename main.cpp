@@ -58,22 +58,24 @@ std::vector<ProcessInfo> getProcessList() {
 }
 
 int main() {
-    initscr();
-    cbreak();
-    noecho();
-    curs_set(0);
+    initscr(); // Initialize the ncurses library
+    noecho(); // Disable automatic echoing of characters to the screen
+    curs_set(0); // Make the cursor invisible
+    // cbreak(); // cbreak mode, which allows immediate character input without the need to press enter
+
+    bool mergedMode = true;
 
     while (true) {
         clear();
         std::vector<ProcessInfo> processList = getProcessList();
 
-        // Group processes by name
+        // Merge processes by name
         std::map<std::string, std::vector<ProcessInfo>> processMap;
         for (const auto& process : processList) {
             processMap[process.name].push_back(process);
         }
 
-        // Calculate total RSS and lowest PID for each group
+        // Calculate total RSS and lowest PID for each merge
         std::vector<ProcessInfo> mergedProcessList;
         for (const auto& entry : processMap) {
             ProcessInfo mergedProcess;
@@ -89,14 +91,27 @@ int main() {
             mergedProcessList.push_back(mergedProcess);
         }
 
-        // Sort the merged processes by reserved memory usage in descending order
-        std::sort(mergedProcessList.begin(), mergedProcessList.end(), [](const ProcessInfo& a, const ProcessInfo& b) {
+        // Toggle merged and unmerged view
+        keypad(stdscr, true); // Enable keypad mode, which allows to use function keys
+        nodelay(stdscr, true); // Disable blocking of getch(), otherwise the program will wait until a key is pressed
+        int c = getch();
+        nodelay(stdscr, false);
+        if (c == KEY_F(2)) // F2
+            mergedMode = !mergedMode;
+        if (mergedMode) 
+            processList = mergedProcessList;
+
+        // Sort the processes by reserved memory usage in descending order
+        std::sort(processList.begin(), processList.end(), [](const ProcessInfo& a, const ProcessInfo& b) {
             return a.rss > b.rss;
         });
 
+        // Display the processes using ncurses library
+        for (const auto& process : processList)
+            std::string truncatedName = process.name.substr(0, 16);
         mvprintw(0, 0, "PID\tMemory\tName");
         int row = 1;
-        for (const auto& process : mergedProcessList) {
+        for (const auto& process : processList) {
             if (row >= LINES - 1) {break;}
 
             std::string truncatedName = process.name.substr(0, 16);
@@ -104,10 +119,10 @@ int main() {
             row++;
         }
 
-        refresh();
-        napms(1000);
+        refresh(); // Refresh the screen
+        napms(1000); // 1 second delay
     }
 
-    endwin();
+    endwin(); // End curses mode
     return 0;
 }
