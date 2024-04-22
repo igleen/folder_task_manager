@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <algorithm>
+#include <map>
 
 struct ProcessInfo {
     std::string pid;
@@ -66,19 +67,40 @@ int main() {
         clear();
         std::vector<ProcessInfo> processList = getProcessList();
 
-        // Sort the processes by reserved memory usage in descending order
-        std::sort(processList.begin(), processList.end(), [](const ProcessInfo& a, const ProcessInfo& b) {
+        // Group processes by name
+        std::map<std::string, std::vector<ProcessInfo>> processMap;
+        for (const auto& process : processList) {
+            processMap[process.name].push_back(process);
+        }
+
+        // Calculate total RSS and lowest PID for each group
+        std::vector<ProcessInfo> mergedProcessList;
+        for (const auto& entry : processMap) {
+            ProcessInfo mergedProcess;
+            mergedProcess.name = entry.first;
+            mergedProcess.rss = 0;
+            mergedProcess.pid = entry.second[0].pid;
+            for (const auto& process : entry.second) {
+                mergedProcess.rss += process.rss;
+                if (std::stoi(process.pid) < std::stoi(mergedProcess.pid)) {
+                    mergedProcess.pid = process.pid;
+                }
+            }
+            mergedProcessList.push_back(mergedProcess);
+        }
+
+        // Sort the merged processes by reserved memory usage in descending order
+        std::sort(mergedProcessList.begin(), mergedProcessList.end(), [](const ProcessInfo& a, const ProcessInfo& b) {
             return a.rss > b.rss;
         });
-        mvprintw(0, 0, "PID\tMemory\tS Name");
-        int row = 2;
-        for (const auto& process : processList) {
-            if (row >= LINES - 1) {
-                break;
-            }
+
+        mvprintw(0, 0, "PID\tMemory\tName");
+        int row = 1;
+        for (const auto& process : mergedProcessList) {
+            if (row >= LINES - 1) {break;}
+
             std::string truncatedName = process.name.substr(0, 16);
-            std::string state = process.state.substr(0, 1); // Get the first character of the state
-            mvprintw(row, 0, "%s\t%ld\t%s %s", process.pid.c_str(), process.rss, state.c_str(), truncatedName.c_str());
+            mvprintw(row, 0, "%s\t%ld\t%s", process.pid.c_str(), process.rss, truncatedName.c_str());
             row++;
         }
 
