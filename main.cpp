@@ -57,6 +57,30 @@ std::vector<ProcessInfo> getProcessList() {
     return processList;
 }
 
+
+void displayProcesses(const std::vector<ProcessInfo>& processList, int selectedProcess) {
+    mvprintw(0, 0, "PID\tMemory\tName");
+    int row = 1;
+
+    for (int i = 0; i < (int)processList.size(); i++) {
+        if (row >= LINES - 1) break; // Check if we have reached the end of the screen
+
+        const auto& process = processList[i];
+        std::string truncatedName = process.name.substr(0, 16);
+
+        if (i == selectedProcess) attron(A_REVERSE); // Enable reverse video mode
+        mvprintw(row, 0, "%s\t%ld\t%s", process.pid.c_str(), process.rss, truncatedName.c_str());
+        if (i == selectedProcess) attroff(A_REVERSE); // Disable reverse video mode
+
+        row++;
+    }
+
+    refresh(); // Refresh the screen
+}
+
+
+
+
 int main() {
     initscr(); // Initialize the ncurses library
     noecho(); // Disable automatic echoing of characters to the screen
@@ -66,74 +90,65 @@ int main() {
 
     bool mergedMode = true;
     int selectedProcess = 0; // Index of the selected process
+    int clock_ms = 1000;
+
+    std::vector<ProcessInfo> processList = getProcessList();
 
     while (true) {
-        clear();
-        std::vector<ProcessInfo> processList = getProcessList();
+        if (clock_ms >= 1000) {
+            clock_ms = 0;
+            clear();
+            processList = getProcessList();
 
-        // Merge processes by name
-        std::map<std::string, std::vector<ProcessInfo>> processMap;
-        for (const auto& process : processList) {
-            processMap[process.name].push_back(process);
-        }
-
-        // Calculate total RSS and lowest PID for each merge
-        std::vector<ProcessInfo> mergedProcessList;
-        for (const auto& entry : processMap) {
-            ProcessInfo mergedProcess;
-            mergedProcess.name = entry.first;
-            mergedProcess.rss = 0;
-            mergedProcess.pid = entry.second[0].pid;
-            for (const auto& process : entry.second) {
-                mergedProcess.rss += process.rss;
-                if (std::stoi(process.pid) < std::stoi(mergedProcess.pid)) {
-                    mergedProcess.pid = process.pid;
-                }
+            // Merge processes by name
+            std::map<std::string, std::vector<ProcessInfo>> processMap;
+            for (const auto& process : processList) {
+                processMap[process.name].push_back(process);
             }
-            mergedProcessList.push_back(mergedProcess);
+
+            // Calculate total RSS and lowest PID for each merge
+            std::vector<ProcessInfo> mergedProcessList;
+            for (const auto& entry : processMap) {
+                ProcessInfo mergedProcess;
+                mergedProcess.name = entry.first;
+                mergedProcess.rss = 0;
+                mergedProcess.pid = entry.second[0].pid;
+                for (const auto& process : entry.second) {
+                    mergedProcess.rss += process.rss;
+                    if (std::stoi(process.pid) < std::stoi(mergedProcess.pid)) {
+                        mergedProcess.pid = process.pid;
+                    }
+                }
+                mergedProcessList.push_back(mergedProcess);
+            }
+
+            if (mergedMode) 
+                processList = mergedProcessList;
+
+            // Sort the processes by reserved memory usage in descending order
+            std::sort(processList.begin(), processList.end(), [](const ProcessInfo& a, const ProcessInfo& b) {
+                return a.rss > b.rss;
+            });
+
+            displayProcesses(processList, selectedProcess);
         }
 
-        // Toggle merged and unmerged view
         nodelay(stdscr, true); // Disable blocking of getch(), otherwise the program will wait until a key is pressed
         int c = getch();
         nodelay(stdscr, false);
-        if (c == KEY_F(2)) // F2
-            mergedMode = !mergedMode;
-        else if (c == KEY_UP && selectedProcess > 0)
+
+        if (c == KEY_UP && selectedProcess > 0)
             selectedProcess--;
-        else if (c == KEY_DOWN && selectedProcess < (int)processList.size() - 1)
+        if (c == KEY_DOWN && selectedProcess < LINES - 3) // -3 because of the header and footer
             selectedProcess++;
+        if (c == KEY_F(2)) 
+            mergedMode = !mergedMode;
 
-        if (mergedMode) 
-            processList = mergedProcessList;
+        // Refresh if any key pressed
+        if (c != ERR) displayProcesses(processList, selectedProcess);
 
-        // Sort the processes by reserved memory usage in descending order
-        std::sort(processList.begin(), processList.end(), [](const ProcessInfo& a, const ProcessInfo& b) {
-            return a.rss > b.rss;
-        });
-
-        // Display the processes using ncurses library
-        mvprintw(0, 0, "PID\tMemory\tName");
-        int row = 1;
-
-        // for each process in the list
-        for (int i = 0; i < (int)processList.size(); i++) {
-            // Check if we have reached the end of the screen
-            if (row >= LINES - 1) { break; }
-
-            const auto& process = processList[i];
-            std::string truncatedName = process.name.substr(0, 16);
-
-            if (i == selectedProcess) attron(A_REVERSE); // Enable reverse video mode
-            // print process line
-            mvprintw(row, 0, "%s\t%ld\t%s", process.pid.c_str(), process.rss, truncatedName.c_str());
-            if (i == selectedProcess) attroff(A_REVERSE); // Disable reverse video mode
-            
-            row++;
-        }
-
-        refresh(); // Refresh the screen
-        napms(1000); // 1 second delay
+        clock_ms += 10;
+        napms(10);
     }
 
     endwin(); // End curses mode
