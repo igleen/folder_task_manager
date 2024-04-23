@@ -62,8 +62,10 @@ int main() {
     noecho(); // Disable automatic echoing of characters to the screen
     curs_set(0); // Make the cursor invisible
     // cbreak(); // cbreak mode, which allows immediate character input without the need to press enter
+    keypad(stdscr, true); // Enable keypad mode, which allows to use function keys
 
     bool mergedMode = true;
+    int selectedProcess = 0; // Index of the selected process
 
     while (true) {
         clear();
@@ -92,12 +94,16 @@ int main() {
         }
 
         // Toggle merged and unmerged view
-        keypad(stdscr, true); // Enable keypad mode, which allows to use function keys
         nodelay(stdscr, true); // Disable blocking of getch(), otherwise the program will wait until a key is pressed
         int c = getch();
         nodelay(stdscr, false);
         if (c == KEY_F(2)) // F2
             mergedMode = !mergedMode;
+        else if (c == KEY_UP && selectedProcess > 0)
+            selectedProcess--;
+        else if (c == KEY_DOWN && selectedProcess < (int)processList.size() - 1)
+            selectedProcess++;
+
         if (mergedMode) 
             processList = mergedProcessList;
 
@@ -107,15 +113,22 @@ int main() {
         });
 
         // Display the processes using ncurses library
-        for (const auto& process : processList)
-            std::string truncatedName = process.name.substr(0, 16);
         mvprintw(0, 0, "PID\tMemory\tName");
         int row = 1;
-        for (const auto& process : processList) {
-            if (row >= LINES - 1) {break;}
 
+        // for each process in the list
+        for (int i = 0; i < (int)processList.size(); i++) {
+            // Check if we have reached the end of the screen
+            if (row >= LINES - 1) { break; }
+
+            const auto& process = processList[i];
             std::string truncatedName = process.name.substr(0, 16);
+
+            if (i == selectedProcess) attron(A_REVERSE); // Enable reverse video mode
+            // print process line
             mvprintw(row, 0, "%s\t%ld\t%s", process.pid.c_str(), process.rss, truncatedName.c_str());
+            if (i == selectedProcess) attroff(A_REVERSE); // Disable reverse video mode
+            
             row++;
         }
 
