@@ -15,6 +15,7 @@ struct ProcessInfo {
     std::string state;
     long rss; // Resident set size (reserved memory)
     bool isMerged = false;
+    std::vector<ProcessInfo> threads;
 };
 
 std::vector<ProcessInfo> getProcessList() {
@@ -59,7 +60,8 @@ std::vector<ProcessInfo> getProcessList() {
 }
 
 
-void displayProcesses(const std::vector<ProcessInfo>& processList, int selectedProcess) {
+void displayProcesses(const std::vector<ProcessInfo>& processList, int selectedProcess, bool showThreads) {
+    clear();
     mvprintw(0, 0, "\tPID\tMemory\tName");
     int row = 1;
 
@@ -72,6 +74,14 @@ void displayProcesses(const std::vector<ProcessInfo>& processList, int selectedP
         if (i == selectedProcess) attron(A_REVERSE); // Enable reverse video mode
         mvprintw(row, 0, "%s%s\t%ld\t%s", process.isMerged ? "    [+] " : "\t", process.pid.c_str(), process.rss, truncatedName.c_str());
         if (i == selectedProcess) attroff(A_REVERSE); // Disable reverse video mode
+
+        if (showThreads && i == selectedProcess && !process.threads.empty()) {
+            for (const auto& thread : process.threads) {
+                row++;
+                if (row >= LINES - 1) break; // Check if we have reached the end of the screen
+                mvprintw(row, 0, "    |_| %s\t%ld\t%s", thread.pid.c_str(), thread.rss, thread.name.c_str());
+            }
+        }
 
         row++;
     }
@@ -92,13 +102,14 @@ int main() {
     bool mergedMode = true;
     int selectedProcess = 0; // Index of the selected process
     int clock_ms = 1000;
+    bool showThreads = false;
 
     std::vector<ProcessInfo> processList = getProcessList();
 
     while (true) {
         if (clock_ms >= 1000) {
             clock_ms = 0;
-            clear();
+
             processList = getProcessList();
 
             // Merge processes by name
@@ -120,6 +131,9 @@ int main() {
                     if (std::stoi(process.pid) < std::stoi(mergedProcess.pid)) {
                         mergedProcess.pid = process.pid;
                     }
+                    if (mergedProcess.isMerged) {
+                        mergedProcess.threads.push_back(process);
+                    }
                 }
                 mergedProcessList.push_back(mergedProcess);
             }
@@ -132,7 +146,7 @@ int main() {
                 return a.rss > b.rss;
             });
 
-            displayProcesses(processList, selectedProcess);
+            displayProcesses(processList, selectedProcess, showThreads);
         }
 
         nodelay(stdscr, true); // Disable blocking of getch(), otherwise the program will wait until a key is pressed
@@ -143,11 +157,15 @@ int main() {
             selectedProcess--;
         if (c == KEY_DOWN && selectedProcess < LINES - 3) // -3 because of the header and footer
             selectedProcess++;
+        if (c == KEY_UP || c == KEY_DOWN)
+            showThreads = false;
         if (c == KEY_F(2)) 
             mergedMode = !mergedMode;
+        if (c == ' ' && processList[selectedProcess].isMerged)
+            showThreads = !showThreads;
 
         // Refresh if any key pressed
-        if (c != ERR) displayProcesses(processList, selectedProcess);
+        if (c != ERR) displayProcesses(processList, selectedProcess, showThreads);
 
         clock_ms += 10;
         napms(10);
