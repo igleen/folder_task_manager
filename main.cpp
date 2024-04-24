@@ -14,6 +14,7 @@ struct ProcessInfo {
     std::string name;
     std::string state;
     long rss; // Resident set size (reserved memory)
+    bool isMerged = false;
 };
 
 std::vector<ProcessInfo> getProcessList() {
@@ -59,7 +60,7 @@ std::vector<ProcessInfo> getProcessList() {
 
 
 void displayProcesses(const std::vector<ProcessInfo>& processList, int selectedProcess) {
-    mvprintw(0, 0, "PID\tMemory\tName");
+    mvprintw(0, 0, "\tPID\tMemory\tName");
     int row = 1;
 
     for (int i = 0; i < (int)processList.size(); i++) {
@@ -69,7 +70,7 @@ void displayProcesses(const std::vector<ProcessInfo>& processList, int selectedP
         std::string truncatedName = process.name.substr(0, 16);
 
         if (i == selectedProcess) attron(A_REVERSE); // Enable reverse video mode
-        mvprintw(row, 0, "%s\t%ld\t%s", process.pid.c_str(), process.rss, truncatedName.c_str());
+        mvprintw(row, 0, "%s%s\t%ld\t%s", process.isMerged ? "    [+] " : "\t", process.pid.c_str(), process.rss, truncatedName.c_str());
         if (i == selectedProcess) attroff(A_REVERSE); // Disable reverse video mode
 
         row++;
@@ -113,6 +114,7 @@ int main() {
                 mergedProcess.name = entry.first;
                 mergedProcess.rss = 0;
                 mergedProcess.pid = entry.second[0].pid;
+                mergedProcess.isMerged = (entry.second.size() > 1); // Set the merged flag
                 for (const auto& process : entry.second) {
                     mergedProcess.rss += process.rss;
                     if (std::stoi(process.pid) < std::stoi(mergedProcess.pid)) {
