@@ -90,8 +90,6 @@ void displayProcesses(const std::vector<ProcessInfo>& processList, int selectedP
 }
 
 
-
-
 int main() {
     initscr(); // Initialize the ncurses library
     noecho(); // Disable automatic echoing of characters to the screen
@@ -115,14 +113,15 @@ int main() {
             // Merge processes by name
             std::map<std::string, std::vector<ProcessInfo>> processMap;
             for (const auto& process : processList) {
-                processMap[process.name].push_back(process);
+                std::string shortname = process.name.substr(0, 8);
+                processMap[shortname].push_back(process);
             }
 
             // Calculate total RSS and lowest PID for each merge
             std::vector<ProcessInfo> mergedProcessList;
             for (const auto& entry : processMap) {
                 ProcessInfo mergedProcess;
-                mergedProcess.name = entry.first;
+                mergedProcess.name = entry.second[0].name;
                 mergedProcess.rss = 0;
                 mergedProcess.pid = entry.second[0].pid;
                 mergedProcess.isMerged = (entry.second.size() > 1); // Set the merged flag
